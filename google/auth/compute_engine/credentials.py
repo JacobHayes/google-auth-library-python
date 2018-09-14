@@ -64,11 +64,14 @@ class Credentials(credentials.ReadOnlyScoped, credentials.Signing,
                 accounts.
         """
         super(Credentials, self).__init__()
-        self._request = requests.Request
+        # TODO: This *seems* to work out of the box, however the signature in
+        # the returned URL appears to be unverifiable.
+        self._request = requests.Request()
         self._service_account_email = service_account_email
+        self.refresh()
         self._signer = iam.Signer(
             request=self._request,
-            credentials=Credentials(),
+            credentials=self,
             service_account_email=self.service_account_email,
         )
 
@@ -88,7 +91,7 @@ class Credentials(credentials.ReadOnlyScoped, credentials.Signing,
         self._service_account_email = info['email']
         self._scopes = info['scopes']
 
-    def refresh(self, request):
+    def refresh(self, request=None):
         """Refresh the access token and scopes.
 
         Args:
@@ -100,6 +103,8 @@ class Credentials(credentials.ReadOnlyScoped, credentials.Signing,
                 service can't be reached if if the instance has not
                 credentials.
         """
+        if request is None:
+            request = self._request
         try:
             self._retrieve_info(request)
             self.token, self.expiry = _metadata.get_service_account_token(
@@ -108,13 +113,11 @@ class Credentials(credentials.ReadOnlyScoped, credentials.Signing,
         except exceptions.TransportError as caught_exc:
             new_exc = exceptions.RefreshError(caught_exc)
             six.raise_from(new_exc, caught_exc)
+        self._initial_refresh = True
 
     @property
     def service_account_email(self):
         """The service account email.
-
-        .. note: This is not guaranteed to be set until :meth`refresh` has been
-            called.
         """
         return self._service_account_email
 
