@@ -29,10 +29,12 @@ from google.auth import exceptions
 from google.auth import iam
 from google.auth import jwt
 from google.auth.compute_engine import _metadata
+from google.auth.transport import requests
 from google.oauth2 import _client
 
 
-class Credentials(credentials.ReadOnlyScoped, credentials.Credentials):
+class Credentials(credentials.ReadOnlyScoped, credentials.Signing,
+                  credentials.Credentials):
     """Compute Engine Credentials.
 
     These credentials use the Google Compute Engine metadata server to obtain
@@ -62,7 +64,13 @@ class Credentials(credentials.ReadOnlyScoped, credentials.Credentials):
                 accounts.
         """
         super(Credentials, self).__init__()
+        self._request = requests.Request
         self._service_account_email = service_account_email
+        self._signer = iam.Signer(
+            request=self._request,
+            credentials=Credentials(),
+            service_account_email=self.service_account_email,
+        )
 
     def _retrieve_info(self, request):
         """Retrieve information about the service account.
@@ -114,6 +122,20 @@ class Credentials(credentials.ReadOnlyScoped, credentials.Credentials):
     def requires_scopes(self):
         """False: Compute Engine credentials can not be scoped."""
         return False
+
+    @_helpers.copy_docstring(credentials.Signing)
+    def sign_bytes(self, message):
+        return self._signer.sign(message)
+
+    @property
+    @_helpers.copy_docstring(credentials.Signing)
+    def signer_email(self):
+        return self.service_account_email
+
+    @property
+    @_helpers.copy_docstring(credentials.Signing)
+    def signer(self):
+        return self._signer
 
 
 _DEFAULT_TOKEN_LIFETIME_SECS = 3600  # 1 hour in seconds
